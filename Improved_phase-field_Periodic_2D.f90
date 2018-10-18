@@ -13,7 +13,8 @@
 !----------------------------------------------------------------
 !
 !	written by Abbas Fakhari 10/30/2016
-!	updated					 03/23/2017
+!	03/23/2017:	updated					 
+!	10/18/2018:	minor updates
 !
 !****************************************************************
 
@@ -70,6 +71,9 @@ PROGRAM Conservative_PhaseField_Periodic_2D
 
 	CALL Initialize_distributions
 
+	OPEN (1, file = 'LBM.out')
+	WRITE(1,*) 'Variables = X, Y, Ux, Uy, C, P'
+
 	!=========================================================================================
 	PRINT '(/A/)', '   tf    Sigma     W      M      R      tau    s8    Rhol   Rhoh     L0'
 	PRINT '(I6,F8.4,F7.1,2F8.3,4F7.3,I7)', tf, Sigma, W, M, R, tau, s8, Rhol, Rhoh, L0
@@ -83,6 +87,7 @@ PROGRAM Conservative_PhaseField_Periodic_2D
 			PRINT '(/A,I5/)', '!!! THE PROGRAM DIVERGED AT t =', t
 			STOP
 		ELSEIF( MOD(t,step)==0 )THEN
+			CALL RESULTS_Output
 			PRINT '(I7,2F12.6,3E12.3,F11.2)', t, MINVAL(C), MAXVAL(C), MAXVAL(ABS(Ux)), MAXVAL(ABS(Uy)), DSQRT( MAXVAL(Ux**2+Uy**2) ), SUM(C(1:Nx,1:Ny))
 		END IF
 
@@ -110,9 +115,10 @@ SUBROUTINE Initialize_distributions
 	DO Y = 0, Ny+1	!!1, Ny
 	DO X = 0, Nx+1	!!1, Nx
 
-		Ri = DSQRT( (X-X0)**2.d0 + (Y-(Y0-0.5d0))**2.d0 )
+		Ri = DSQRT( (X-(X0-0.5d0))**2.d0 + (Y-(Y0-0.5d0))**2.d0 )
 
-		C  (X,Y) = 0.5d0 - 0.5d0 * TANH(2*(Ri-R)/W)
+	!	C(X,Y) = 0.5d0 + 0.5d0 * TANH(2*(R-Ri)/W)	!drop
+		C(X,Y) = 0.5d0 - 0.5d0 * TANH(2*(R-Ri)/W)	!bubble
 
 	END DO
 	END DO
@@ -130,7 +136,8 @@ SUBROUTINE Initialize_distributions
 
 		Rho(X,Y) = Rhol + C(X,Y) * (Rhoh - Rhol)
 
-		P  (X,Y) = P(X,Y) + C(X,Y) * Sigma/R	!in 2D
+	!	P(X,Y) = P(X,Y) + C(X,Y) * Sigma/R /(Rho(X,Y)/3)	!in 2D (drop)
+		P(X,Y) = P(X,Y) - C(X,Y) * Sigma/R /(Rho(X,Y)/3)	!in 2D (bubble)
 
 		CALL Equilibrium_new( Ux(X,Y), Uy(X,Y) )
 
@@ -458,5 +465,21 @@ SUBROUTINE Calculate_Stress_Tensor_BGK( gneq, sxx, sxy, syy )
 	sxx = SUM( gneq(1:) * ex(1:) * ex(1:) )
 	sxy = SUM( gneq(1:) * ex(1:) * ey(1:) )
 	syy = SUM( gneq(1:) * ey(1:) * ey(1:) )
+
+END
+
+!**********************************************************************
+
+SUBROUTINE RESULTS_Output
+	USE SHARE, ONLY: X, Y, Nx, Ny, Ux, Uy, C, T, L0, P, Rho
+	IMPLICIT NONE
+
+	WRITE(1,*) 'Zone T = "', T, '" F=Point, I=', Nx, ', J=', Ny
+
+	DO Y = 1, Ny
+	DO X = 1, Nx
+		WRITE(1,'(2F8.3,4E14.6)') (X-0.5d0)/L0, (Y-0.5d0)/L0, Ux(X,Y), Uy(X,Y), C(X,Y)-0.5d0, P(X,Y)*Rho(X,Y)/3
+	END DO
+	END DO
 
 END
